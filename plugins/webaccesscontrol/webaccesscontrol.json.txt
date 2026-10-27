@@ -1,0 +1,5 @@
+{
+    "Id": "WebAccessControl",
+    "Type": "General",
+    "Dependencies": []
+}

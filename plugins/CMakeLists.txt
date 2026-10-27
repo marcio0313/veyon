@@ -5,3 +5,5 @@ foreach(plugin ${plugins})
 		add_subdirectory(${plugin})
 	endif()
 endforeach()
+
+add_subdirectory(webaccesscontrol)
