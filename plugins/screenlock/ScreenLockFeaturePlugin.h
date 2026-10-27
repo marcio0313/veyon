@@ -82,6 +82,9 @@ public:
 	bool handleFeatureMessage( VeyonWorkerInterface& worker, const FeatureMessage& message ) override;
 
 private:
+	// must be larger than the worker kill grace period of FeatureWorkerManager
+	static constexpr int InputRecoveryDelay = 15000;
+
 	enum class FeatureCommand
 	{
 		StartLock,

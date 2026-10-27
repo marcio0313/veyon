@@ -202,11 +202,10 @@ bool FeatureWorkerManager::stopWorker( Feature::Uid featureUid )
 
 		if( worker.process )
 		{
-			auto killTimer = new QTimer;
-			connect( killTimer, &QTimer::timeout, worker.process, &QProcess::terminate );
-			connect( killTimer, &QTimer::timeout, worker.process, &QProcess::kill );
-			connect( killTimer, &QTimer::timeout, killTimer, &QTimer::deleteLater );
-			killTimer->start( 5000 );
+			// give the worker a chance to shut down gracefully (and restore e.g. disabled input
+			// devices) before killing it hard – a hard kill skips all destructors
+			QTimer::singleShot(5000, worker.process, &QProcess::terminate);
+			QTimer::singleShot(10000, worker.process, &QProcess::kill);
 		}
 
 		m_workers.remove( featureUid );

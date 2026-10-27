@@ -26,6 +26,7 @@
 
 #include <QCoreApplication>
 #include <QProcess>
+#include <QSettings>
 
 #include "ConfigurationManager.h"
 #include "PlatformServiceFunctions.h"
@@ -94,11 +95,36 @@ WindowsInputDeviceFunctions::~WindowsInputDeviceFunctions()
 
 void WindowsInputDeviceFunctions::enableInputDevices()
 {
+	// 1. release interception/hooks FIRST so that input works again even if one of the
+	//    following (slow) steps hangs or the process gets killed meanwhile
 	disableInterception();
+
+	// 2. merge in state left behind by a crashed/killed worker
+	loadRecoveryState();
+
 	restoreHIDService();
 	restorePowerScheme();
 
-	WindowsDeviceFunctions::setDevicesState(inputDevicesToDisable(), WindowsDeviceFunctions::State::Enabled);
+	// 3. re-enable exactly the devices we disabled (also when they are no longer part of the
+	//    current configuration), then everything matching the configuration as fallback
+	WindowsDeviceFunctions::DeviceList devicesToEnable;
+	for (const auto& instanceId : std::as_const(m_disabledDeviceIds))
+	{
+		devicesToEnable.append({instanceId, {}});
+	}
+	devicesToEnable += inputDevicesToDisable();
+
+	if (WindowsDeviceFunctions::setDevicesState(devicesToEnable, WindowsDeviceFunctions::State::Enabled) == false)
+	{
+		vWarning() << "not all input devices could be re-enabled – retrying once";
+		WindowsDeviceFunctions::setDevicesState(devicesToEnable, WindowsDeviceFunctions::State::Enabled);
+	}
+
+	m_disabledDeviceIds.clear();
+	m_hidServiceActivated = false;
+	m_hidServiceStatusInitialized = false;
+	m_originalPowerSchemeId.clear();
+	clearRecoveryState();
 
 	m_inputDevicesDisabled = false;
 }
@@ -109,14 +135,88 @@ void WindowsInputDeviceFunctions::disableInputDevices()
 {
 	if( m_inputDevicesDisabled == false )
 	{
+		// merge state of a previous lock that has not been restored properly (e.g. other lock
+		// feature still active or crashed worker) so that it does not get overwritten
+		loadRecoveryState();
+
 		enableInterception();
 		stopHIDService();
 		setCustomPowerScheme();
 
-		WindowsDeviceFunctions::setDevicesState(inputDevicesToDisable(), WindowsDeviceFunctions::State::Disabled);
+		// the interception driver already swallows physical keyboard and mouse input – disabling the
+		// devices additionally makes them re-enumerate on every lock/unlock cycle which may exhaust
+		// the driver's device slots and leave the mouse dead until reboot
+		if (m_interceptionContext == nullptr)
+		{
+			const auto devices = inputDevicesToDisable();
+			for (const auto& device : devices)
+			{
+				if (WindowsDeviceFunctions::setDeviceState(device, WindowsDeviceFunctions::State::Disabled))
+				{
+					m_disabledDeviceIds.append(device.instanceId);
+				}
+			}
+		}
 
 		m_inputDevicesDisabled = true;
+
+		saveRecoveryState();
 	}
+}
+
+
+
+static QSettings recoverySettings()
+{
+	return QSettings(QStringLiteral("HKEY_LOCAL_MACHINE\\SOFTWARE\\Veyon Solutions\\Veyon\\InputDeviceRecovery"),
+					 QSettings::NativeFormat);
+}
+
+
+
+void WindowsInputDeviceFunctions::saveRecoveryState()
+{
+	auto settings = recoverySettings();
+	settings.setValue(QStringLiteral("DisabledDevices"), m_disabledDeviceIds);
+	settings.setValue(QStringLiteral("HidServiceWasRunning"), m_hidServiceActivated);
+	settings.setValue(QStringLiteral("OriginalPowerScheme"), m_originalPowerSchemeId);
+	settings.sync();
+}
+
+
+
+void WindowsInputDeviceFunctions::loadRecoveryState()
+{
+	auto settings = recoverySettings();
+
+	const auto devices = settings.value(QStringLiteral("DisabledDevices")).toStringList();
+	for (const auto& id : devices)
+	{
+		if (m_disabledDeviceIds.contains(id, Qt::CaseInsensitive) == false)
+		{
+			m_disabledDeviceIds.append(id);
+		}
+	}
+
+	if (settings.value(QStringLiteral("HidServiceWasRunning")).toBool())
+	{
+		m_hidServiceActivated = true;
+	}
+
+	const auto powerScheme = settings.value(QStringLiteral("OriginalPowerScheme")).toString();
+	if (m_originalPowerSchemeId.isEmpty() && powerScheme.isEmpty() == false)
+	{
+		m_originalPowerSchemeId = powerScheme;
+	}
+}
+
+
+
+void WindowsInputDeviceFunctions::clearRecoveryState()
+{
+	auto settings = recoverySettings();
+	settings.remove(QString{});
+	settings.sync();
 }
 
 
@@ -234,7 +334,8 @@ void WindowsInputDeviceFunctions::initHIDServiceStatus()
 {
 	if( m_hidServiceStatusInitialized == false )
 	{
-		m_hidServiceActivated = VeyonCore::platform().serviceFunctions().isRunning( m_hidServiceName );
+		m_hidServiceActivated = m_hidServiceActivated ||
+								VeyonCore::platform().serviceFunctions().isRunning( m_hidServiceName );
 		m_hidServiceStatusInitialized = true;
 	}
 }

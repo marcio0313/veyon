@@ -23,6 +23,7 @@
  */
 
 #include <QCoreApplication>
+#include <QTimer>
 
 #include "ScreenLockFeaturePlugin.h"
 #include "ComputerControlInterface.h"
@@ -63,6 +64,19 @@ ScreenLockFeaturePlugin::ScreenLockFeaturePlugin( QObject* parent ) :
 		connect (VeyonCore::instance(), &VeyonCore::initialized,
 				 this, []() {
 			VeyonCore::platform().inputDeviceFunctions().enableInputDevices();
+		});
+	}
+	else if (VeyonCore::component() == VeyonCore::Component::Worker)
+	{
+		// make sure input devices are restored on every regular shutdown path of the worker
+		// (lost server connection, WM_CLOSE from QProcess::terminate(), last window closed, ...)
+		connect(qApp, &QCoreApplication::aboutToQuit, this, [this]() {
+			if (m_lockWidget)
+			{
+				delete m_lockWidget;
+				m_lockWidget = nullptr;
+				VeyonCore::platform().coreFunctions().restoreScreenSaverSettings();
+			}
 		});
 	}
 }
@@ -126,6 +140,18 @@ bool ScreenLockFeaturePlugin::handleFeatureMessage( VeyonServerInterface& server
 		{
 			if (server.featureWorkerManager().isWorkerRunning(message.featureUid()))
 				server.featureWorkerManager().sendMessageToManagedSystemWorker(message);
+
+			// safety net: if the worker crashed or was killed before it could restore the input
+			// devices, the service (running as SYSTEM) restores them from the persisted state
+			auto* workerManager = &server.featureWorkerManager();
+			QTimer::singleShot(InputRecoveryDelay, this, [this, workerManager]() {
+				if (workerManager->isWorkerRunning(m_screenLockFeature.uid()) == false &&
+					workerManager->isWorkerRunning(m_lockInputDevicesFeature.uid()) == false)
+				{
+					vDebug() << "running input device recovery after unlock";
+					VeyonCore::platform().inputDeviceFunctions().enableInputDevices();
+				}
+			});
 
 			return true;
 		}

@@ -304,6 +304,27 @@ bool WindowsDeviceFunctions::setDeviceState(const Device& device, State state)
 			break;
 		}
 
+		// some devices (e.g. PS/2 mice/keyboards behind i8042prt or certain HID filter drivers) can't
+		// be re-enabled without a reboot once disabled – never leave such a device disabled, otherwise
+		// it stays dead after unlocking until the computer is restarted
+		SP_DEVINSTALL_PARAMS_W installParams{};
+		installParams.cbSize = sizeof(installParams);
+		if (SetupDiGetDeviceInstallParamsW(deviceInfoSet, &deviceInfoData, &installParams) &&
+			(installParams.Flags & (DI_NEEDREBOOT | DI_NEEDRESTART)))
+		{
+			vWarning() << "device" << device.instanceId << device.name << "requires a reboot for the state change";
+
+			if (state == State::Disabled)
+			{
+				// roll back immediately
+				params.StateChange = DICS_ENABLE;
+				SetupDiSetClassInstallParamsW(deviceInfoSet, &deviceInfoData,
+											  &params.ClassInstallHeader, sizeof(params));
+				SetupDiCallClassInstaller(DIF_PROPERTYCHANGE, deviceInfoSet, &deviceInfoData);
+				break;
+			}
+		}
+
 		success = true;
 		break;
 	}

@@ -87,10 +87,21 @@ LockWidget::LockWidget( Mode mode, const QPixmap& background, QWidget* parent ) 
 
 LockWidget::~LockWidget()
 {
+	// release Qt-level grabs explicitly and hide the fullscreen window before restoring the
+	// devices, so that no invisible topmost window keeps capturing the mouse
+	releaseMouse();
+	releaseKeyboard();
+	unsetCursor();
+	hide();
+
 	VeyonCore::platform().inputDeviceFunctions().enableInputDevices();
 	VeyonCore::platform().coreFunctions().setSystemUiState( true );
 
-	QGuiApplication::restoreOverrideCursor();
+	// pop all override cursors (not just one) so that the cursor never stays blank
+	while (QGuiApplication::overrideCursor())
+	{
+		QGuiApplication::restoreOverrideCursor();
+	}
 }
 
 

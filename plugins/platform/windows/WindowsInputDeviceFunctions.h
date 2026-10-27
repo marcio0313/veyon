@@ -65,6 +65,12 @@ private:
 	static bool uninstallInterception();
 	static int interceptionInstaller( const QString& argument );
 
+	// persistent recovery state (HKLM) so that the service can restore input devices even if the
+	// worker process crashed or was killed while the screen was locked
+	void saveRecoveryState();
+	void loadRecoveryState();
+	void clearRecoveryState();
+
 	bool m_inputDevicesDisabled{false};
 	InterceptionContext m_interceptionContext{nullptr};
 	HHOOK m_keyboardHook{nullptr};
@@ -72,5 +78,6 @@ private:
 	bool m_hidServiceStatusInitialized{false};
 	bool m_hidServiceActivated{false};
 	QString m_originalPowerSchemeId{};
+	QStringList m_disabledDeviceIds{};
 
 };
