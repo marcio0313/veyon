@@ -1,45 +1,75 @@
 #pragma once
 
-#include <QObject>
-#include <VeyonCore.h>
-#include <PluginInterface.h>
-#include <FeatureProviderInterface.h>
+#include "FeatureProviderInterface.h"
+#include "PluginInterface.h"
 
-class WebAccessControlPlugin : public QObject,
-                               public PluginInterface,
-                               public FeatureProviderInterface
+class WebAccessControlPlugin : public QObject, PluginInterface, FeatureProviderInterface
 {
-    Q_OBJECT
-    Q_PLUGIN_METADATA(IID PluginInterface_iid FILE "webaccesscontrol.json")
-    Q_INTERFACES(PluginInterface FeatureProviderInterface)
-
+	Q_OBJECT
+	Q_PLUGIN_METADATA(IID "io.veyon.Veyon.Plugins.WebAccessControl")
+	Q_INTERFACES(PluginInterface FeatureProviderInterface)
 public:
-    explicit WebAccessControlPlugin(QObject *parent = nullptr);
-    ~WebAccessControlPlugin() override = default;
+	explicit WebAccessControlPlugin( QObject* parent = nullptr );
+	~WebAccessControlPlugin() override = default;
 
-    // Metadados do Plugin
-    PluginInfo pluginInfo() const override
-    {
-        return {
-            QStringLiteral("WebAccessControl"),
-            PluginInfo::Type::General,
-            QObject::tr("Web Access Control"),
-            QStringLiteral("1.0"),
-            QObject::tr("Controle de acesso à web e bloqueio total de internet"),
-            QStringLiteral("Custom")
-        };
-    }
+	Plugin::Uid uid() const override
+	{
+		return Plugin::Uid{ QStringLiteral("8a9e4c10-5b2d-4e3f-9a1c-7d8e9f0a1b2c") };
+	}
 
-    bool initialize(const QVariantMap &configuration) override;
+	QVersionNumber version() const override
+	{
+		return QVersionNumber( 1, 0 );
+	}
 
-    // Registro das Ações e Botões
-    FeatureList features() const override;
-    bool startFeature(const Feature &feature, const ComputerControlInterface::Pointer &computer) override;
-    bool stopFeature(const Feature &feature, const ComputerControlInterface::Pointer &computer) override;
+	QString name() const override
+	{
+		return QStringLiteral( "WebAccessControl" );
+	}
 
-    // Identificador único do botão na barra do Veyon Master
-    static constexpr Feature::Uid InternetKillSwitchUid = 0x57454201;
+	QString description() const override
+	{
+		return tr( "Block internet access on client computers" );
+	}
+
+	QString vendor() const override
+	{
+		return QStringLiteral( "Veyon Community" );
+	}
+
+	QString copyright() const override
+	{
+		return QStringLiteral( "Marcio" );
+	}
+
+	const FeatureList& featureList() const override;
+
+	bool controlFeature( Feature::Uid featureUid, Operation operation, const QVariantMap& arguments,
+						const ComputerControlInterfaceList& computerControlInterfaces ) override;
+
+	bool startFeature( VeyonMasterInterface& master, const Feature& feature,
+					   const ComputerControlInterfaceList& computerControlInterfaces ) override;
+
+	bool stopFeature( VeyonMasterInterface& master, const Feature& feature,
+					  const ComputerControlInterfaceList& computerControlInterfaces ) override;
+
+	bool handleFeatureMessage( ComputerControlInterface::Pointer computerControlInterface,
+							   const FeatureMessage& message ) override;
+
+	bool handleFeatureMessage( VeyonServerInterface& server,
+							   const MessageContext& messageContext,
+							   const FeatureMessage& message ) override;
+
+	bool handleFeatureMessage( VeyonWorkerInterface& worker,
+							   const FeatureMessage& message ) override;
 
 private:
-    void applyInternetBlock(bool block);
+	enum Commands
+	{
+		EnableWebBlock,
+		DisableWebBlock
+	};
+
+	const Feature m_webBlockFeature;
+	const FeatureList m_features;
 };

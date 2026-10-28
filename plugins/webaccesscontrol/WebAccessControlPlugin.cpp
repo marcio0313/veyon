@@ -1,97 +1,109 @@
-#include "WebAccessControlPlugin.h"
 #include <QProcess>
-#include <QDebug>
 
-WebAccessControlPlugin::WebAccessControlPlugin(QObject *parent)
-    : QObject(parent)
+#include "WebAccessControlPlugin.h"
+#include "FeatureWorkerManager.h"
+#include "VeyonServerInterface.h"
+
+WebAccessControlPlugin::WebAccessControlPlugin( QObject* parent ) :
+	QObject( parent ),
+	m_webBlockFeature( QStringLiteral( "WebAccessBlock" ),
+					   Feature::Mode | Feature::AllComponents,
+					   Feature::Uid( "b4f1a2c3-6d7e-4f8a-9b0c-1d2e3f4a5b6c" ),
+					   Feature::Uid(),
+					   tr( "Block internet" ),
+					   tr( "Internet blocked" ),
+					   tr( "Click this button to block or unblock internet access on selected computers." ),
+					   QStringLiteral( ":/core/lock.png" ) ),
+	m_features( { m_webBlockFeature } )
 {
 }
 
-bool WebAccessControlPlugin::initialize(const QVariantMap &)
+const FeatureList& WebAccessControlPlugin::featureList() const
 {
-    return true;
+	return m_features;
 }
 
-FeatureList WebAccessControlPlugin::features() const
+bool WebAccessControlPlugin::controlFeature( Feature::Uid featureUid,
+	Operation operation, const QVariantMap& arguments,
+	const ComputerControlInterfaceList& computerControlInterfaces )
 {
-    Feature killSwitch(InternetKillSwitchUid,
-                       Feature::Type::Action,
-                       tr("Bloquear Internet"),
-                       tr("Corta ou restabelece todo o acesso web nos alunos selecionados"));
+	if( hasFeature( featureUid ) == false )
+	{
+		return false;
+	}
 
-    // Utiliza ícones de rede padrão do tema do sistema
-    killSwitch.setIcon(QIcon::fromTheme(QStringLiteral("network-disconnect")));
+	if( operation == Operation::Initialize )
+	{
+		return sendFeatureMessage( FeatureMessage{ featureUid, EnableWebBlock }, computerControlInterfaces );
+	}
 
-    return { killSwitch };
+	if( operation == Operation::Stop )
+	{
+		return sendFeatureMessage( FeatureMessage{ featureUid, DisableWebBlock }, computerControlInterfaces );
+	}
+
+	return false;
 }
 
-bool WebAccessControlPlugin::startFeature(const Feature &feature, const ComputerControlInterface::Pointer &computer)
+bool WebAccessControlPlugin::startFeature( VeyonMasterInterface& master,
+	const Feature& feature, const ComputerControlInterfaceList& computerControlInterfaces )
 {
-    Q_UNUSED(computer);
-
-    if (feature.uid() == InternetKillSwitchUid)
-    {
-        qInfo() << "[WebAccessControl] Ativando bloqueio total de internet...";
-        applyInternetBlock(true);
-        return true;
-    }
-
-    return false;
+	Q_UNUSED(master)
+	return controlFeature( feature.uid(), Operation::Initialize, {}, computerControlInterfaces );
 }
 
-bool WebAccessControlPlugin::stopFeature(const Feature &feature, const ComputerControlInterface::Pointer &computer)
+bool WebAccessControlPlugin::stopFeature( VeyonMasterInterface& master,
+	const Feature& feature, const ComputerControlInterfaceList& computerControlInterfaces )
 {
-    Q_UNUSED(computer);
-
-    if (feature.uid() == InternetKillSwitchUid)
-    {
-        qInfo() << "[WebAccessControl] Desativando bloqueio de internet...";
-        applyInternetBlock(false);
-        return true;
-    }
-
-    return false;
+	Q_UNUSED(master)
+	return controlFeature( feature.uid(), Operation::Stop, {}, computerControlInterfaces );
 }
 
-void WebAccessControlPlugin::applyInternetBlock(bool block)
+bool WebAccessControlPlugin::handleFeatureMessage( ComputerControlInterface::Pointer computerControlInterface,
+												   const FeatureMessage& message )
 {
+	Q_UNUSED(computerControlInterface)
+	Q_UNUSED(message)
+	return false;
+}
+
+bool WebAccessControlPlugin::handleFeatureMessage( VeyonServerInterface& server,
+												   const MessageContext& messageContext,
+												   const FeatureMessage& message )
+{
+	Q_UNUSED(server)
+	Q_UNUSED(messageContext)
+
+	if( m_webBlockFeature.uid() == message.featureUid() )
+	{
+		if( message.command() == EnableWebBlock )
+		{
 #ifdef Q_OS_WIN
-    if (block)
-    {
-        // Cria regras de saída bloqueando portas 80 (HTTP), 443 (HTTPS) e 53 (DNS)
-        QProcess::execute(QStringLiteral("netsh"), {
-            QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"), QStringLiteral("rule"),
-            QStringLiteral("name=Veyon_Block_Web"), QStringLiteral("dir=out"), QStringLiteral("action=block"),
-            QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=80,443")
-        });
-
-        QProcess::execute(QStringLiteral("netsh"), {
-            QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"), QStringLiteral("rule"),
-            QStringLiteral("name=Veyon_Block_DNS"), QStringLiteral("dir=out"), QStringLiteral("action=block"),
-            QStringLiteral("protocol=UDP"), QStringLiteral("remoteport=53")
-        });
-    }
-    else
-    {
-        // Remove as regras de bloqueio do Firewall
-        QProcess::execute(QStringLiteral("netsh"), {
-            QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("delete"), QStringLiteral("rule"),
-            QStringLiteral("name=Veyon_Block_Web")
-        });
-
-        QProcess::execute(QStringLiteral("netsh"), {
-            QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("delete"), QStringLiteral("rule"),
-            QStringLiteral("name=Veyon_Block_DNS")
-        });
-    }
-#elif defined(Q_OS_LINUX)
-    if (block)
-    {
-        QProcess::execute(QStringLiteral("iptables"), {QStringLiteral("-A"), QStringLiteral("OUTPUT"), QStringLiteral("-p"), QStringLiteral("tcp"), QStringLiteral("-m"), QStringLiteral("multiport"), QStringLiteral("--dports"), QStringLiteral("80,443"), QStringLiteral("-j"), QStringLiteral("DROP")});
-    }
-    else
-    {
-        QProcess::execute(QStringLiteral("iptables"), {QStringLiteral("-D"), QStringLiteral("OUTPUT"), QStringLiteral("-p"), QStringLiteral("tcp"), QStringLiteral("-m"), QStringLiteral("multiport"), QStringLiteral("--dports"), QStringLiteral("80,443"), QStringLiteral("-j"), QStringLiteral("DROP")});
-    }
+			QProcess::execute( QStringLiteral("netsh"), { QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"), QStringLiteral("rule"), QStringLiteral("name=VeyonWebBlock"), QStringLiteral("dir=out"), QStringLiteral("action=block"), QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=80,443") } );
+#else
+			QProcess::execute( QStringLiteral("iptables"), { QStringLiteral("-A"), QStringLiteral("OUTPUT"), QStringLiteral("-p"), QStringLiteral("tcp"), QStringLiteral("-m"), QStringLiteral("multiport"), QStringLiteral("--dports"), QStringLiteral("80,443"), QStringLiteral("-j"), QStringLiteral("REJECT") } );
 #endif
+		}
+		else if( message.command() == DisableWebBlock )
+		{
+#ifdef Q_OS_WIN
+			QProcess::execute( QStringLiteral("netsh"), { QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("delete"), QStringLiteral("rule"), QStringLiteral("name=VeyonWebBlock") } );
+#else
+			QProcess::execute( QStringLiteral("iptables"), { QStringLiteral("-D"), QStringLiteral("OUTPUT"), QStringLiteral("-p"), QStringLiteral("tcp"), QStringLiteral("-m"), QStringLiteral("multiport"), QStringLiteral("--dports"), QStringLiteral("80,443"), QStringLiteral("-j"), QStringLiteral("REJECT") } );
+#endif
+		}
+		return true;
+	}
+
+	return false;
 }
+
+bool WebAccessControlPlugin::handleFeatureMessage( VeyonWorkerInterface& worker,
+												   const FeatureMessage& message )
+{
+	Q_UNUSED(worker)
+	Q_UNUSED(message)
+	return false;
+}
+
+IMPLEMENT_CONFIG_PROXY(WebAccessControlConfiguration)
