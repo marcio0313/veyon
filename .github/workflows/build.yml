@@ -7,7 +7,6 @@ on:
 jobs:
   build-windows:
     runs-on: ubuntu-latest
-    container: registry.gitlab.com/veyon/ci-mingw-w64:main
     steps:
       - uses: actions/checkout@v4
         with:
@@ -17,8 +16,11 @@ jobs:
       - name: Configurar Git
         run: git config --global --add safe.directory $GITHUB_WORKSPACE
 
-      - name: Compilar Veyon para Windows 64-bit
-        run: .ci/windows/build.sh x86_64
+      - name: Descarregar Imagem e Compilar Windows
+        run: |
+          docker pull registry.gitlab.com/veyon/ci-mingw-w64:main || true
+          docker run --rm -v $GITHUB_WORKSPACE:/workspace -w /workspace registry.gitlab.com/veyon/ci-mingw-w64:main .ci/windows/build.sh x86_64
+          docker run --rm -v $GITHUB_WORKSPACE:/workspace -w /workspace registry.gitlab.com/veyon/ci-mingw-w64:main .ci/windows/build.sh x86_64 win-nsi || true
 
       - name: Guardar Instalador nos Artefactos
         uses: actions/upload-artifact@v4
@@ -27,3 +29,4 @@ jobs:
           path: |
             veyon-win*
             veyon-*win*
+            *.exe
