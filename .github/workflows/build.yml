@@ -1,23 +1,29 @@
-name: "CI Builds"
+name: CI builds
+
 on:
   push:
-    tags-ignore:
-      - "v*.*.*"
-    branches:
-      - '**'
+  pull_request:
 
 jobs:
-  build-linux:
-    strategy:
-      matrix:
-        dist:
-          - debian.11
-          - fedora.44
+  build-windows:
     runs-on: ubuntu-latest
-    container: veyon/ci.linux.${{matrix.dist}}
+    container: veyon/ci.windows
     steps:
       - uses: actions/checkout@v6
         with:
+          fetch-depth: 0
           submodules: recursive
-      - run: git config --global --add safe.directory $GITHUB_WORKSPACE
-      - run: .ci/linux.${{matrix.dist}}/script.sh $GITHUB_WORKSPACE /tmp
+
+      - name: Configurar Git
+        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+
+      - name: Compilar Veyon para Windows 64-bit
+        run: |
+          .ci/windows/build.sh x86_64
+          .ci/windows/build.sh x86_64 win-nsi || true
+
+      - name: Guardar Instalador nos Artefactos
+        uses: actions/upload-artifact@v4
+        with:
+          name: Instalador-Veyon-Windows-64bit
+          path: veyon-*win*
