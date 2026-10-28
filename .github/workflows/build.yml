@@ -9,15 +9,14 @@ jobs:
     runs-on: ubuntu-latest
     container: fedora:41
     steps:
-      - name: Instalar compilador Windows (MinGW64 + Qt6 + Dependencias)
+      - name: Instalar compilador Windows (MinGW64 + Qt6 + Ferramentas)
         run: |
-          dnf install -y git cmake ninja-build patch sed \
+          dnf install -y git cmake ninja-build patch sed curl tar xz \
             mingw64-gcc-c++ mingw64-nsis mingw64-pkg-config \
             mingw64-qt6-qtbase mingw64-qt6-qtdeclarative mingw64-qt6-qttools \
             mingw64-qt6-qtsvg mingw64-qt6-qt5compat mingw64-qt6-qttranslations \
-            mingw64-openssl mingw64-qca-qt6 mingw64-qca \
-            mingw64-libjpeg-turbo mingw64-libpng mingw64-zlib mingw64-lzo \
-            mingw64-libvncserver mingw64-cyrus-sasl mingw64-openldap \
+            mingw64-openssl mingw64-libjpeg-turbo mingw64-libpng mingw64-zlib \
+            mingw64-cyrus-sasl mingw64-openldap \
             qt6-qtbase-devel qt6-qttools-devel --skip-unavailable
 
       - name: Baixar codigo fonte completo
@@ -26,11 +25,33 @@ jobs:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Compilar LZO e QCA para MinGW64
+        run: |
+          SYSROOT=/usr/x86_64-w64-mingw32/sys-root/mingw
+          
+          # 1. Compila e instala LZO para Windows 64-bit
+          mkdir -p /tmp/deps && cd /tmp/deps
+          curl -sL https://www.oberhumer.com/opensource/lzo/download/lzo-2.10.tar.gz | tar xz
+          cd lzo-2.10
+          mkdir build && cd build
+          mingw64-cmake .. -G Ninja -DENABLE_SHARED=ON -DENABLE_STATIC=ON
+          ninja install
+
+          # 2. Compila e instala QCA (Qt Cryptographic Architecture) para Qt6 MinGW64
+          cd /tmp/deps
+          git clone --depth 1 --branch v2.3.9 https://invent.kde.org/libraries/qca.git
+          cd qca && mkdir build && cd build
+          mingw64-cmake .. -G Ninja -DQT6=ON -DBUILD_TESTS=OFF -DBUILD_TOOLS=OFF -DBUILD_PLUGINS="ossl"
+          ninja install
+
+          # 3. Se faltar OpenLDAP no MinGW, compila ou cria os headers/libs do 3rdparty
+          if [ ! -f "$SYSROOT/include/ldap.h" ]; then
+            dnf install -y mingw64-openldap || true
+          fi
+
       - name: Compilar Veyon para Windows (.exe e .dll)
         run: |
           git config --global --add safe.directory $GITHUB_WORKSPACE
-          
-          # Prepara os arquivos do VNC como no build.sh original
           $GITHUB_WORKSPACE/.ci/common/strip-ultravnc-sources.sh || true
 
           mkdir -p /tmp/build-win64
