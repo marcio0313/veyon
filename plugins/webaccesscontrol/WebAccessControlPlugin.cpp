@@ -27,6 +27,8 @@ bool WebAccessControlPlugin::controlFeature( Feature::Uid featureUid,
 	Operation operation, const QVariantMap& arguments,
 	const ComputerControlInterfaceList& computerControlInterfaces )
 {
+	Q_UNUSED(arguments)
+
 	if( hasFeature( featureUid ) == false )
 	{
 		return false;
@@ -34,12 +36,12 @@ bool WebAccessControlPlugin::controlFeature( Feature::Uid featureUid,
 
 	if( operation == Operation::Initialize )
 	{
-		return sendFeatureMessage( FeatureMessage{ featureUid, EnableWebBlock }, computerControlInterfaces );
+		return sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( EnableWebBlock ) }, computerControlInterfaces );
 	}
 
 	if( operation == Operation::Stop )
 	{
-		return sendFeatureMessage( FeatureMessage{ featureUid, DisableWebBlock }, computerControlInterfaces );
+		return sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( DisableWebBlock ) }, computerControlInterfaces );
 	}
 
 	return false;
@@ -76,7 +78,7 @@ bool WebAccessControlPlugin::handleFeatureMessage( VeyonServerInterface& server,
 
 	if( m_webBlockFeature.uid() == message.featureUid() )
 	{
-		if( message.command() == EnableWebBlock )
+		if( message.command() == static_cast<FeatureMessage::Command>( EnableWebBlock ) )
 		{
 #ifdef Q_OS_WIN
 			QProcess::execute( QStringLiteral("netsh"), { QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("add"), QStringLiteral("rule"), QStringLiteral("name=VeyonWebBlock"), QStringLiteral("dir=out"), QStringLiteral("action=block"), QStringLiteral("protocol=TCP"), QStringLiteral("remoteport=80,443") } );
@@ -84,7 +86,7 @@ bool WebAccessControlPlugin::handleFeatureMessage( VeyonServerInterface& server,
 			QProcess::execute( QStringLiteral("iptables"), { QStringLiteral("-A"), QStringLiteral("OUTPUT"), QStringLiteral("-p"), QStringLiteral("tcp"), QStringLiteral("-m"), QStringLiteral("multiport"), QStringLiteral("--dports"), QStringLiteral("80,443"), QStringLiteral("-j"), QStringLiteral("REJECT") } );
 #endif
 		}
-		else if( message.command() == DisableWebBlock )
+		else if( message.command() == static_cast<FeatureMessage::Command>( DisableWebBlock ) )
 		{
 #ifdef Q_OS_WIN
 			QProcess::execute( QStringLiteral("netsh"), { QStringLiteral("advfirewall"), QStringLiteral("firewall"), QStringLiteral("delete"), QStringLiteral("rule"), QStringLiteral("name=VeyonWebBlock") } );
@@ -105,5 +107,3 @@ bool WebAccessControlPlugin::handleFeatureMessage( VeyonWorkerInterface& worker,
 	Q_UNUSED(message)
 	return false;
 }
-
-IMPLEMENT_CONFIG_PROXY(WebAccessControlConfiguration)
