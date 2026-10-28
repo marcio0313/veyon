@@ -44,8 +44,15 @@ jobs:
           git config --global --add safe.directory $GITHUB_WORKSPACE
           $GITHUB_WORKSPACE/.ci/common/strip-ultravnc-sources.sh || true
 
-          # Desativa o plugin opcional LDAP para nao exigir OpenLDAP no MinGW
-          sed -i 's/add_subdirectory(ldap)/#add_subdirectory(ldap)/g' $GITHUB_WORKSPACE/plugins/CMakeLists.txt
+          # Esvazia os CMakeLists do plugin LDAP e de testes para nao exigir OpenLDAP no Windows
+          echo "" > $GITHUB_WORKSPACE/plugins/ldap/CMakeLists.txt || true
+          echo "" > $GITHUB_WORKSPACE/plugins/ldap/kldap/CMakeLists.txt || true
+          echo "" > $GITHUB_WORKSPACE/plugins/ldap/common/CMakeLists.txt || true
+          echo "" > $GITHUB_WORKSPACE/plugins/ldap/basic/CMakeLists.txt || true
+          echo "" > $GITHUB_WORKSPACE/tests/CMakeLists.txt || true
+
+          # Remove tambem do nsis/veyon.nsi.in qualquer referencia a dll do ldap caso exista
+          sed -i '/ldap/Id' $GITHUB_WORKSPACE/nsis/veyon.nsi.in || true
 
           mkdir -p /tmp/build-win64
           cd /tmp/build-win64
