@@ -7,52 +7,48 @@ on:
 jobs:
   build-windows:
     runs-on: ubuntu-latest
+    container: fedora:41
     steps:
+      - name: Instalar compilador Windows (MinGW64 + Qt6 + NSIS)
+        run: |
+          dnf install -y git cmake ninja-build mingw64-gcc-c++ mingw64-nsis \
+            mingw64-qt6-qtbase mingw64-qt6-qtdeclarative mingw64-qt6-qttools \
+            mingw64-qt6-qtsvg mingw64-qt6-qt5compat mingw64-openssl \
+            mingw64-libjpeg-turbo mingw64-libpng mingw64-zlib mingw64-lzo \
+            mingw64-libvncserver mingw64-SASL mingw64-openldap \
+            qt6-qtbase-devel qt6-qttools-devel --skip-unavailable
+
       - name: Baixar codigo fonte completo
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Descobrir imagem Docker e Compilar Windows (.exe)
+      - name: Compilar Veyon para Windows (.exe e .dll)
         run: |
           git config --global --add safe.directory $GITHUB_WORKSPACE
           
-          # Testa qual é o nome público exato da imagem MinGW do Veyon no Docker Hub / GHCR
-          DOCKER_IMG=""
-          for img in \
-            "veyon/ci-mingw-w64:main" \
-            "veyon/ci-mingw-w64:latest" \
-            "veyon/ci.mingw.w64:latest" \
-            "veyon/ci.windows:latest" \
-            "ghcr.io/veyon/ci-mingw-w64:main" \
-            "ghcr.io/veyon/veyon/ci-mingw-w64:main"; do
-            echo "Testando imagem: $img ..."
-            if docker pull "$img"; then
-              DOCKER_IMG="$img"
-              echo ">>> SUCESSO! Imagem encontrada: $DOCKER_IMG"
-              break
-            fi
-          done
-
-          if [ -z "$DOCKER_IMG" ]; then
-            echo "Nenhuma imagem pre-pronta encontrada. Listando imagens publicas da conta veyon no Docker Hub:"
-            curl -s "https://hub.docker.com/v2/repositories/veyon/?page_size=100" | jq -r '.results[].name'
-            exit 1
+          # Cria atalho caso o qt-cmake6 do Fedora tenha o sufixo 6
+          if [ ! -f /usr/x86_64-w64-mingw32/bin/qt-cmake ] && [ -f /usr/bin/mingw64-cmake ]; then
+            mkdir -p /usr/x86_64-w64-mingw32/bin
+            ln -sf /usr/bin/mingw64-cmake /usr/x86_64-w64-mingw32/bin/qt-cmake
           fi
 
-          # Executa o script oficial do Windows dentro do container encontrado
-          docker run --rm \
-            -v "$GITHUB_WORKSPACE:/workspace" \
-            -w /workspace \
-            "$DOCKER_IMG" \
-            /bin/bash -c "git config --global --add safe.directory /workspace && .ci/windows/build.sh x86_64"
+          mkdir -p /tmp/build-win64
+          cd /tmp/build-win64
+          mingw64-cmake $GITHUB_WORKSPACE \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DWITH_QT6=ON
+          
+          ninja
+          ninja win-nsi || true
 
-      - name: Guardar Instalador (.exe) nos Artefatos
+      - name: Guardar Executavel e Plugin nos Artefatos
         uses: actions/upload-artifact@v4
         with:
-          name: Instalador-Veyon-Windows-64bit
+          name: Veyon-Windows-64bit
           path: |
-            veyon-win*
-            veyon-*win*
-            *.exe
+            /tmp/build-win64/**/*.exe
+            /tmp/build-win64/**/*.dll
+            /tmp/build-win64/plugins/webaccesscontrol/*.dll
