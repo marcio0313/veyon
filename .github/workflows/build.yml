@@ -8,30 +8,50 @@ jobs:
   build-windows:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Baixar codigo fonte completo
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
-      - name: Instalar dependencias e MinGW para Windows
+      - name: Descobrir imagem Docker e Compilar Windows (.exe)
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++-mingw-w64-x86-64 mingw-w64 nsis qt6-base-dev qt6-tools-dev libqt6svg6-dev libssl-dev
+          git config --global --add safe.directory $GITHUB_WORKSPACE
+          
+          # Testa qual é o nome público exato da imagem MinGW do Veyon no Docker Hub / GHCR
+          DOCKER_IMG=""
+          for img in \
+            "veyon/ci-mingw-w64:main" \
+            "veyon/ci-mingw-w64:latest" \
+            "veyon/ci.mingw.w64:latest" \
+            "veyon/ci.windows:latest" \
+            "ghcr.io/veyon/ci-mingw-w64:main" \
+            "ghcr.io/veyon/veyon/ci-mingw-w64:main"; do
+            echo "Testando imagem: $img ..."
+            if docker pull "$img"; then
+              DOCKER_IMG="$img"
+              echo ">>> SUCESSO! Imagem encontrada: $DOCKER_IMG"
+              break
+            fi
+          done
 
-      - name: Configurar Git
-        run: git config --global --add safe.directory $GITHUB_WORKSPACE
+          if [ -z "$DOCKER_IMG" ]; then
+            echo "Nenhuma imagem pre-pronta encontrada. Listando imagens publicas da conta veyon no Docker Hub:"
+            curl -s "https://hub.docker.com/v2/repositories/veyon/?page_size=100" | jq -r '.results[].name'
+            exit 1
+          fi
 
-      - name: Compilar Veyon para Windows com script oficial
-        run: |
-          # Corrige o prefixo do compilador se necessario e executa o build nativo
-          export PATH=/usr/bin:$PATH
-          .ci/windows/build.sh x86_64
-          .ci/windows/build.sh x86_64 win-nsi || true
+          # Executa o script oficial do Windows dentro do container encontrado
+          docker run --rm \
+            -v "$GITHUB_WORKSPACE:/workspace" \
+            -w /workspace \
+            "$DOCKER_IMG" \
+            /bin/bash -c "git config --global --add safe.directory /workspace && .ci/windows/build.sh x86_64"
 
-      - name: Guardar Instalador nos Artefactos
+      - name: Guardar Instalador (.exe) nos Artefatos
         uses: actions/upload-artifact@v4
         with:
-          name: Veyon-Windows-64bit
+          name: Instalador-Veyon-Windows-64bit
           path: |
             veyon-win*
             veyon-*win*

@@ -1,62 +1,10 @@
-name: "Build and release binaries"
-on:
-  push:
-    tags:
-      - "v*.*.*"
+name: Build and release binaries
 
-permissions:
-  contents: write
+on:
+  workflow_dispatch:
 
 jobs:
-  build-linux:
-    strategy:
-      matrix:
-        dist:
-          - debian.11
-          - debian.12
-          - debian.13
-          - fedora.43
-          - fedora.44
-          - opensuse.leap.16.0
-          - opensuse.tumbleweed
-          - rhel.8
-          - rhel.9
-          - rhel.10
-          - ubuntu.22.04
-          - ubuntu.24.04
-          - ubuntu.26.04
+  placeholder:
     runs-on: ubuntu-latest
-    container: veyon/ci.linux.${{matrix.dist}}
-    env:
-      CI_COMMIT_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
     steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          submodules: recursive
-      - run: git config --global --add safe.directory $GITHUB_WORKSPACE
-      - run: .ci/linux.${{matrix.dist}}/script.sh $GITHUB_WORKSPACE /tmp
-      - uses: softprops/action-gh-release@v2
-        with:
-          files: veyon*
-
-build-windows:
-  strategy:
-    matrix:
-      arch:
-        - win64
-        - win32
-  runs-on: ubuntu-latest
-  container: veyon/ci.mingw.${{matrix.arch}}
-  env:
-    CI_COMMIT_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-  steps:
-    - uses: actions/checkout@v6
-      with:
-        fetch-depth: 0
-        submodules: recursive
-    - run: git config --global --add safe.directory $GITHUB_WORKSPACE
-    - run: .ci/windows/script.sh $GITHUB_WORKSPACE /tmp ${{matrix.arch}}
-    - uses: softprops/action-gh-release@v2
-      with:
-        files: veyon*
+      - run: echo "Desativado no push automatico"
