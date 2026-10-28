@@ -13,11 +13,12 @@ jobs:
         run: |
           dnf install -y git cmake ninja-build patch sed curl tar xz zip \
             mingw64-gcc-c++ mingw64-nsis mingw64-pkg-config \
-            mingw64-qt6-qtbase mingw64-qt6-qtdeclarative mingw64-qt6-qttools \
+            mingw64-qt6-qtbase mingw64-qt6-qtbase-private-devel \
+            mingw64-qt6-qtdeclarative mingw64-qt6-qttools \
             mingw64-qt6-qtsvg mingw64-qt6-qt5compat mingw64-qt6-qttranslations \
             mingw64-openssl mingw64-libjpeg-turbo mingw64-libpng mingw64-zlib \
             mingw64-cyrus-sasl \
-            qt6-qtbase-devel qt6-qttools-devel --skip-unavailable
+            qt6-qtbase-devel qt6-qtbase-private-devel qt6-qttools-devel --skip-unavailable
 
       - name: Baixar codigo fonte completo
         uses: actions/checkout@v4
@@ -51,8 +52,23 @@ jobs:
           echo "" > $GITHUB_WORKSPACE/plugins/ldap/basic/CMakeLists.txt || true
           echo "" > $GITHUB_WORKSPACE/tests/CMakeLists.txt || true
 
-          # Remove tambem do nsis/veyon.nsi.in qualquer referencia a dll do ldap caso exista
+          # Remove tambem referencias a dll do ldap caso existam no instalador NSIS
           sed -i '/ldap/Id' $GITHUB_WORKSPACE/nsis/veyon.nsi.in || true
+
+          # Caso a versao do Fedora nao separe o pacote private-devel e omita apenas o ficheiro CMake:
+          CMAKE_DIR="/usr/x86_64-w64-mingw32/sys-root/mingw/lib/cmake"
+          for comp in Core Gui Widgets Network PrintSupport Sql Concurrent; do
+            if [ ! -d "$CMAKE_DIR/Qt6${comp}Private" ] && [ -d "$CMAKE_DIR/Qt6${comp}" ]; then
+              mkdir -p "$CMAKE_DIR/Qt6${comp}Private"
+              cat <<EOF > "$CMAKE_DIR/Qt6${comp}Private/Qt6${comp}PrivateConfig.cmake"
+          set(Qt6${comp}Private_FOUND TRUE)
+          if(NOT TARGET Qt6::${comp}Private)
+            add_library(Qt6::${comp}Private INTERFACE IMPORTED)
+            target_link_libraries(Qt6::${comp}Private INTERFACE Qt6::${comp})
+          endif()
+          EOF
+            fi
+          done
 
           mkdir -p /tmp/build-win64
           cd /tmp/build-win64
