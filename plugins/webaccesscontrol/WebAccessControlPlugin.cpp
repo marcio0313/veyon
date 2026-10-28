@@ -7,7 +7,7 @@
 WebAccessControlPlugin::WebAccessControlPlugin( QObject* parent ) :
 	QObject( parent ),
 	m_webBlockFeature( QStringLiteral( "WebAccessBlock" ),
-					   Feature::Mode | Feature::AllComponents,
+					   Feature::Flag::Mode | Feature::Flag::AllComponents,
 					   Feature::Uid( "b4f1a2c3-6d7e-4f8a-9b0c-1d2e3f4a5b6c" ),
 					   Feature::Uid(),
 					   tr( "Block internet" ),
@@ -36,12 +36,14 @@ bool WebAccessControlPlugin::controlFeature( Feature::Uid featureUid,
 
 	if( operation == Operation::Initialize )
 	{
-		return sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( EnableWebBlock ) }, computerControlInterfaces );
+		sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( EnableWebBlock ) }, computerControlInterfaces );
+		return true;
 	}
 
 	if( operation == Operation::Stop )
 	{
-		return sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( DisableWebBlock ) }, computerControlInterfaces );
+		sendFeatureMessage( FeatureMessage{ featureUid, static_cast<FeatureMessage::Command>( DisableWebBlock ) }, computerControlInterfaces );
+		return true;
 	}
 
 	return false;
