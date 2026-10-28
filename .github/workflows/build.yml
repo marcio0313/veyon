@@ -45,18 +45,21 @@ jobs:
           git config --global --add safe.directory $GITHUB_WORKSPACE
           $GITHUB_WORKSPACE/.ci/common/strip-ultravnc-sources.sh || true
 
-          # Esvazia os CMakeLists do plugin LDAP e de testes para nao exigir OpenLDAP no Windows
+          # 1. Desativa plugins LDAP e testes opcionais
           echo "" > $GITHUB_WORKSPACE/plugins/ldap/CMakeLists.txt || true
           echo "" > $GITHUB_WORKSPACE/plugins/ldap/kldap/CMakeLists.txt || true
-          echo "" > $GITHUB_WORKSPACE/plugins/ldap/common/CMakeLists.txt || true
-          echo "" > $GITHUB_WORKSPACE/plugins/ldap/basic/CMakeLists.txt || true
           echo "" > $GITHUB_WORKSPACE/tests/CMakeLists.txt || true
-
-          # Remove tambem referencias a dll do ldap caso existam no instalador NSIS
           sed -i '/ldap/Id' $GITHUB_WORKSPACE/nsis/veyon.nsi.in || true
 
-          # Caso a versao do Fedora nao separe o pacote private-devel e omita apenas o ficheiro CMake:
+          # 2. Corrige automaticamente o parametro NAME no webaccesscontrol/CMakeLists.txt se faltar
+          if ! grep -q "NAME" "$GITHUB_WORKSPACE/plugins/webaccesscontrol/CMakeLists.txt"; then
+            sed -i 's/build_veyon_plugin(webaccesscontrol/build_veyon_plugin(webaccesscontrol\n\tNAME WebAccessControl/' "$GITHUB_WORKSPACE/plugins/webaccesscontrol/CMakeLists.txt"
+          fi
+
+          # 3. Garante que os targets Qt6*Private existem e incluem as pastas private do Qt6
           CMAKE_DIR="/usr/x86_64-w64-mingw32/sys-root/mingw/lib/cmake"
+          QT_INC="/usr/x86_64-w64-mingw32/sys-root/mingw/include/qt6"
+          QT_VER=$(ls "$QT_INC/QtCore" | grep -E '^[0-9]+\.' | head -n 1)
           for comp in Core Gui Widgets Network PrintSupport Sql Concurrent; do
             if [ ! -d "$CMAKE_DIR/Qt6${comp}Private" ] && [ -d "$CMAKE_DIR/Qt6${comp}" ]; then
               mkdir -p "$CMAKE_DIR/Qt6${comp}Private"
@@ -65,6 +68,9 @@ jobs:
           if(NOT TARGET Qt6::${comp}Private)
             add_library(Qt6::${comp}Private INTERFACE IMPORTED)
             target_link_libraries(Qt6::${comp}Private INTERFACE Qt6::${comp})
+            target_include_directories(Qt6::${comp}Private INTERFACE
+              "${QT_INC}/Qt${comp}/${QT_VER}"
+              "${QT_INC}/Qt${comp}/${QT_VER}/Qt${comp}")
           endif()
           EOF
             fi
