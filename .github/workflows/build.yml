@@ -45,11 +45,13 @@ jobs:
           git config --global --add safe.directory $GITHUB_WORKSPACE
           $GITHUB_WORKSPACE/.ci/common/strip-ultravnc-sources.sh || true
 
-          # 1. Desativa plugins LDAP e testes opcionais
+          # 1. Desativa plugins LDAP, WebAPI e testes opcionais
           echo "" > $GITHUB_WORKSPACE/plugins/ldap/CMakeLists.txt || true
           echo "" > $GITHUB_WORKSPACE/plugins/ldap/kldap/CMakeLists.txt || true
+          echo "" > $GITHUB_WORKSPACE/plugins/webapi/CMakeLists.txt || true
           echo "" > $GITHUB_WORKSPACE/tests/CMakeLists.txt || true
           sed -i '/ldap/Id' $GITHUB_WORKSPACE/nsis/veyon.nsi.in || true
+          sed -i '/webapi/Id' $GITHUB_WORKSPACE/nsis/veyon.nsi.in || true
 
           # 2. Corrige automaticamente o parametro NAME no webaccesscontrol/CMakeLists.txt se faltar
           if ! grep -q "NAME" "$GITHUB_WORKSPACE/plugins/webaccesscontrol/CMakeLists.txt"; then
@@ -84,6 +86,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DWITH_QT6=ON \
             -DWITH_BUNDLED_LIBVNC=ON \
+            -DWITH_WEBAPI=OFF \
             -DWITH_PCH=OFF
           
           ninja
