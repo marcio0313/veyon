@@ -7,33 +7,25 @@ on:
 jobs:
   build-windows:
     runs-on: ubuntu-latest
-    container:
-      image: debian:11
     steps:
-      - name: Instalar Docker no container Debian
-        run: |
-          apt-get update && apt-get install -y curl git
-          curl -fsSL https://get.docker.com -o get-docker.sh && sh get-docker.sh || true
-
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
           submodules: recursive
 
+      - name: Instalar dependencias e MinGW para Windows
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake ninja-build g++-mingw-w64-x86-64 mingw-w64 nsis qt6-base-dev qt6-tools-dev libqt6svg6-dev libssl-dev
+
       - name: Configurar Git
         run: git config --global --add safe.directory $GITHUB_WORKSPACE
 
-      - name: Compilar com imagem oficial via Docker
+      - name: Compilar Veyon para Windows com script oficial
         run: |
-          # Puxa a imagem oficial pública do repositório do Veyon no Docker Hub
-          docker pull veyon/ci.windows:latest || docker pull veyon/ci.windows || true
-          
-          # Executa o script de build dentro do ambiente correto
-          docker run --rm -v $GITHUB_WORKSPACE:/workspace -w /workspace veyon/ci.windows:latest .ci/windows/build.sh x86_64 || \
+          # Corrige o prefixo do compilador se necessario e executa o build nativo
+          export PATH=/usr/bin:$PATH
           .ci/windows/build.sh x86_64
-
-      - name: Gerar instalador NSIS (.exe)
-        run: |
           .ci/windows/build.sh x86_64 win-nsi || true
 
       - name: Guardar Instalador nos Artefactos
