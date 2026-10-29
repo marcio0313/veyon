@@ -58,7 +58,10 @@ jobs:
             sed -i 's/build_veyon_plugin(webaccesscontrol/build_veyon_plugin(webaccesscontrol\n\tNAME WebAccessControl/' "$GITHUB_WORKSPACE/plugins/webaccesscontrol/CMakeLists.txt"
           fi
 
-          # 3. Garante que os targets Qt6*Private existem e incluem as pastas private do Qt6
+          # 3. Corrige o bug de UNICODE (GetComputerNameW vs char*) no libvncserver
+          sed -i 's/GetComputerName(/GetComputerNameA(/g' $GITHUB_WORKSPACE/3rdparty/libvncserver/src/libvncserver/main.c || true
+
+          # 4. Garante que os targets Qt6*Private existem e incluem as pastas private do Qt6
           CMAKE_DIR="/usr/x86_64-w64-mingw32/sys-root/mingw/lib/cmake"
           QT_INC="/usr/x86_64-w64-mingw32/sys-root/mingw/include/qt6"
           QT_VER=$(ls "$QT_INC/QtCore" | grep -E '^[0-9]+\.' | head -n 1)
@@ -81,13 +84,19 @@ jobs:
           mkdir -p /tmp/build-win64
           cd /tmp/build-win64
           
+          # Ignora warnings de ponteiros incompativeis para evitar que o GCC pare a compilacao
+          export CFLAGS="-Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
+          export CXXFLAGS="-Wno-error=incompatible-pointer-types -Wno-error=implicit-function-declaration"
+          
           mingw64-cmake $GITHUB_WORKSPACE \
             -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DWITH_QT6=ON \
             -DWITH_BUNDLED_LIBVNC=ON \
             -DWITH_WEBAPI=OFF \
-            -DWITH_PCH=OFF
+            -DWITH_PCH=OFF \
+            -DCMAKE_C_FLAGS="$CFLAGS" \
+            -DCMAKE_CXX_FLAGS="$CXXFLAGS"
           
           ninja
           ninja windows-binaries || true
